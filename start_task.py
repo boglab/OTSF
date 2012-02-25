@@ -1,9 +1,14 @@
 import sys
-sys.path.append('/opt/boglab')
-sys.path.append('/opt/boglab/genome_scoring')
+import os
+
+current_folder = os.path.dirname(__file__)
+sys.path.append(current_folder)
+sys.path.append(os.path.join(current_folder, 'genome_scoring'))
+
+
 from datetime import datetime
 from optparse import OptionParser
-from genome_scoring import TASK_MODULE
+from genome_scoring import TASK_MODULE, RVD_SEQ_REGEX
 import re
 import urllib
 
@@ -22,10 +27,10 @@ def logger(message):
     print "[%s] %s" % (datetime.now().ctime(), message)
 
 
-RVD_re = re.compile(r'^(?:(NI|NN|NG|HD|NS)\s*){12,20}$', re.IGNORECASE | re.MULTILINE)
+RVD_re = re.compile(RVD_SEQ_REGEX, re.IGNORECASE | re.MULTILINE)
 if not RVD_re.match(options.rvds):
-    urllib.urlopen("https://boglab.plp.iastate.edu/talent/jobcomplete/" + str(options.nodeid) + "/1")
-    logger("RVD sequence is not in the correct format.  Enter between 12 and 20 RVDs using the standard single letter amino acid abbreviations. Currently supported RVDs for genomes are HD, NN, NI, NG, NS.")
+    #urllib.urlopen("https://boglab.plp.iastate.edu/talent/jobcomplete/" + str(options.nodeid) + "/1")
+    logger("RVD sequence is not in the correct format.  Enter between 12 and 31 RVDs using the standard single letter amino acid abbreviations.")
     sys.exit(1)
 
 valid_organisms = ['drosophila_melanogaster', 'arabidopsis_thaliana', 'mus_musculus', 'oryza_sativa', 'caenorhabditis_elegans']

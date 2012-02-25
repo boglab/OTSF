@@ -7,3 +7,5 @@ TREE_FILE = TREE_DIR + "/%s"
 #SCORING_MATRIX = "/home/nick/workspace/boglab/genome_scoring/numpy_scoring_dump"
 SCORING_MATRIX = "/opt/boglab/genome_scoring/numpy_scoring_dump"
 BOUNDARY_FILE = TREE_DIR + "/%s_terminators"
+TASK_MODULE = "genome_scoring.%s_task"
+RVD_SEQ_REGEX = r'^(?:(?:HD|NI|NG|NN|NS|N\*|HG|HA|ND|NK|HI|HN|NA|IG|H\*|S\*|NH|YG|SN|SS|NC|HH)\s+){11,30}(?:HD|NI|NG|NN|NS|N\*|HG|HA|ND|NK|HI|HN|NA|IG|H\*|S\*|NH|YG|SN|SS|NC|HH)$'
