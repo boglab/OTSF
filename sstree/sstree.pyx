@@ -69,6 +69,8 @@ cdef extern from "SSTree.h":
         ulong LF(uchar c, ulong& sp, ulong& ep)
         ulong inverseSuffixLink(ulong nodeId, uchar c)
 
+# X replaces * in RVD names
+
 #runtime scoring matrix type
 scoringMatrixDtype = np.dtype([
     ('HD', 'float32'),
@@ -76,7 +78,7 @@ scoringMatrixDtype = np.dtype([
     ('NG', 'float32'),
     ('NN', 'float32'),
     ('NS', 'float32'),
-    ('N*', 'float32'),
+    ('NX', 'float32'),
     ('HG', 'float32'),
     ('HA', 'float32'),
     ('ND', 'float32'),
@@ -85,16 +87,15 @@ scoringMatrixDtype = np.dtype([
     ('HN', 'float32'),
     ('NA', 'float32'),
     ('IG', 'float32'),
-    ('H*', 'float32'),
-    ('S*', 'float32'),
+    ('HX', 'float32'),
+    ('SX', 'float32'),
     ('NH', 'float32'),
     ('YG', 'float32'),
     ('SN', 'float32'),
     ('SS', 'float32'),
     ('NC', 'float32'),
     ('HH', 'float32'),
-    #other
-    ('ZZ', 'float32'),
+    ('XX', 'float32'),
 ])
 
 #compile time scoring matrix type
@@ -104,7 +105,7 @@ cdef packed struct scoringMatrixRecord:
     np.float32_t NG
     np.float32_t NN
     np.float32_t NS
-    np.float32_t N*
+    np.float32_t NX
     np.float32_t HG
     np.float32_t HA
     np.float32_t ND
@@ -113,8 +114,8 @@ cdef packed struct scoringMatrixRecord:
     np.float32_t HN
     np.float32_t NA
     np.float32_t IG
-    np.float32_t H*
-    np.float32_t S*
+    np.float32_t HX
+    np.float32_t SX
     np.float32_t NH
     np.float32_t YG
     np.float32_t SN
@@ -122,7 +123,7 @@ cdef packed struct scoringMatrixRecord:
     np.float32_t NC
     np.float32_t HH
     #other
-    np.float32_t ZZ
+    np.float32_t XX
         
 ctypedef packed struct talentQueueItem:
     ulong nid
@@ -373,7 +374,7 @@ def ScoreTalentTask(querySequence, outputFilepath, subMatrix, baseMap, geneBound
     cdef talentQueueItem* node
     cdef talentQueueItem* child
     
-    querySequence = querySequence.upper().rstrip()
+    querySequence = querySequence.replace("*", "Z").upper().rstrip()
     diresidues = querySequence.split(' ')
     
     cdef unsigned int diresiduesLength = len(diresidues)
@@ -385,7 +386,7 @@ def ScoreTalentTask(querySequence, outputFilepath, subMatrix, baseMap, geneBound
     cdef double cutoffScore = 2.5 * bestScore
     
     
-    startNode = sTree.search(<uchar*> 'T', 1)
+    startNode = sTree.search(<uchar*> startLetter, 1)
     
     cdef talentQueueItem *testItem = <talentQueueItem*> malloc(sizeof(talentQueueItem))
     testItem.nid = startNode
