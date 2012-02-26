@@ -127,7 +127,6 @@ cdef packed struct scoringMatrixRecord:
 ctypedef packed struct talentQueueItem:
     ulong nid
     double score
-    ulong mismatches
         
 cdef class PySSTree:
 
@@ -364,7 +363,7 @@ cdef class PySSTree:
         
 def ScoreTalentTask(querySequence, outputFilepath, subMatrix, baseMap, geneBoundaries, np.ndarray[scoringMatrixRecord] scoringMatrix, PySSTree psTree):
     
-    cdef ulong startNode, k, childNid, childMismatches, textPos
+    cdef ulong startNode, k, childNid, textPos
     cdef unsigned int parentDepth, depth
     cdef SSTree *sTree = psTree.thisptr
     cdef deque[talentQueueItem*] *openSet = new deque[talentQueueItem*]()
@@ -378,7 +377,6 @@ def ScoreTalentTask(querySequence, outputFilepath, subMatrix, baseMap, geneBound
     diresidues = querySequence.split(' ')
     
     cdef unsigned int diresiduesLength = len(diresidues)
-    cdef unsigned int allowedMismatches = diresiduesLength / 2
     
     
     for diresidue in diresidues:
@@ -392,7 +390,6 @@ def ScoreTalentTask(querySequence, outputFilepath, subMatrix, baseMap, geneBound
     cdef talentQueueItem *testItem = <talentQueueItem*> malloc(sizeof(talentQueueItem))
     testItem.nid = startNode
     testItem.score = 0
-    testItem.mismatches = 0
     
     openSet.push_back(testItem)
     
@@ -421,7 +418,6 @@ def ScoreTalentTask(querySequence, outputFilepath, subMatrix, baseMap, geneBound
                 while childNid != 0:
                     
                     childScore = node.score
-                    childMismatches = node.mismatches
                     
                     k = 1
                     depth = parentDepth
@@ -431,7 +427,7 @@ def ScoreTalentTask(querySequence, outputFilepath, subMatrix, baseMap, geneBound
                     
                     while depth < diresiduesLength and edgeChar != '\x00':
                         
-                        if edgeChar != '\x41' and edgeChar != '\x43' and edgeChar != '\x47' and edgeChar != '\x54': #$DNARe.match(edgeChar):
+                        if edgeChar != '\x41' and edgeChar != '\x43' and edgeChar != '\x47' and edgeChar != '\x54':
                             badChar = True
                             break
                         
@@ -443,18 +439,14 @@ def ScoreTalentTask(querySequence, outputFilepath, subMatrix, baseMap, geneBound
                         else:
                             childScore += scoringMatrix['ZZ'][baseIndex]
                         
-                        if edgeChar not in subMatrix[diresidue]:
-                            childMismatches += 1
-                            
                         k += 1
                         depth += 1
                         edgeChar = "%c" % sTree.edge(childNid, k)
                     
-                    if not badChar and childScore < cutoffScore and childMismatches <= allowedMismatches:
+                    if not badChar and childScore < cutoffScore:
                         child = <talentQueueItem*> malloc(sizeof(talentQueueItem))
                         child.nid = childNid
                         child.score = childScore
-                        child.mismatches = childMismatches
                         openSet.push_back(child)
                     
                     childNid = sTree.sibling(childNid)
@@ -470,7 +462,6 @@ def ScoreTalentTask(querySequence, outputFilepath, subMatrix, baseMap, geneBound
                         child = <talentQueueItem*> malloc(sizeof(talentQueueItem))
                         child.nid = childNid
                         child.score = node.score
-                        child.mismatches = node.mismatches
                         openSet.push_back(child)
                         
                         childNid = sTree.sibling(childNid)
