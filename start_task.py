@@ -29,7 +29,7 @@ def logger(message):
 
 RVD_re = re.compile(RVD_SEQ_REGEX, re.IGNORECASE | re.MULTILINE)
 if not RVD_re.match(options.rvds):
-    #urllib.urlopen("https://boglab.plp.iastate.edu/talent/jobcomplete/" + str(options.nodeid) + "/1")
+    urllib.urlopen("https://boglab.plp.iastate.edu/talent/jobcomplete/" + str(options.nodeid) + "/1")
     logger("RVD sequence is not in the correct format.  Enter between 12 and 31 RVDs using the standard single letter amino acid abbreviations.")
     sys.exit(1)
 
