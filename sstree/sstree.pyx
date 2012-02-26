@@ -361,7 +361,9 @@ cdef class PySSTree:
         
     cpdef PrintTree(self, ulong v, ulong d):
         self.thisptr.PrintTree(v, d)
-        
+
+
+
 def ScoreTalentTask(querySequence, outputFilepath, subMatrix, baseMap, geneBoundaries, np.ndarray[scoringMatrixRecord] scoringMatrix, PySSTree psTree):
     
     cdef ulong startNode, k, childNid, textPos
@@ -374,7 +376,7 @@ def ScoreTalentTask(querySequence, outputFilepath, subMatrix, baseMap, geneBound
     cdef talentQueueItem* node
     cdef talentQueueItem* child
     
-    querySequence = querySequence.replace("*", "Z").upper().rstrip()
+    querySequence = querySequence.replace("*", "X").upper().rstrip()
     diresidues = querySequence.split(' ')
     
     cdef unsigned int diresiduesLength = len(diresidues)
