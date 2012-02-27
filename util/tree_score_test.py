@@ -55,6 +55,6 @@ randMap = ["NG", "NN", "HD", "NI", "NS"]
 querySequence = "NN NG NN NG NG HD HD NG HD NI NN HD NG NN NG NN NG".split()
 
 def doIt():
-        ScoreTalentTask(string.join(querySequence, " "), "droso_standalone_seq_" + str(int(time.time())) + ".txt", subMatrix, baseMap, geneBoundaries, scoringMatrix, sTree)
+        ScoreTalentTask(string.join(querySequence, " "), "droso_standalone_seq_" + str(int(time.time())) + ".txt", True, geneBoundaries, scoringMatrix, sTree)
         
 print timeit.Timer(doIt).timeit(1)

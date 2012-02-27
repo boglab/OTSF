@@ -8,6 +8,8 @@ from libcpp.deque cimport deque
 from libc.stdlib cimport malloc, free
 from libcpp cimport bool
 from libcpp.pair cimport pair
+from libcpp.map cimport map
+from libc.string cimport strndup
 
 #https://groups.google.com/d/topic/cython-users/4h2_AYi_ncA/discussion
 cdef extern from * namespace "SSTree":
@@ -128,7 +130,23 @@ cdef packed struct scoringMatrixRecord:
 ctypedef packed struct talentQueueItem:
     ulong nid
     double score
-        
+
+cdef map[uchar, int] baseMap
+
+baseMap['A'] = 0
+baseMap['C'] = 1
+baseMap['G'] = 2
+baseMap['T'] = 3
+
+
+cdef map[uchar, int] revBaseMap
+
+revBaseMap['A'] = 3
+revBaseMap['C'] = 2
+revBaseMap['G'] = 1
+revBaseMap['T'] = 0
+
+
 cdef class PySSTree:
 
     cdef SSTree *thisptr
@@ -364,124 +382,164 @@ cdef class PySSTree:
 
 
 
-def ScoreTalentTask(querySequence, outputFilepath, subMatrix, baseMap, geneBoundaries, np.ndarray[scoringMatrixRecord] scoringMatrix, PySSTree psTree):
+
+def ScoreTalentTask(querySequence, outputFilepath, bool revComp, geneBoundaries, np.ndarray[scoringMatrixRecord] scoringMatrix, PySSTree psTree):
     
-    cdef ulong startNode, k, childNid, textPos
-    cdef unsigned int parentDepth, depth
     cdef SSTree *sTree = psTree.thisptr
-    cdef deque[talentQueueItem*] *openSet = new deque[talentQueueItem*]()
-    cdef char* startLetter = "T"
     cdef double bestScore = 0
-    cdef double childScore
-    cdef talentQueueItem* node
-    cdef talentQueueItem* child
     
-    querySequence = querySequence.replace("*", "X").upper().rstrip()
-    diresidues = querySequence.split(' ')
+    #querySequence = querySequence.replace("*", "X").upper().rstrip()
+    #diresidues = querySequence.split(' ')
     
-    cdef unsigned int diresiduesLength = len(diresidues)
-    
+    querySequence = querySequence.replace("*", "X").upper()
+    diresidues = querySequence.split()
     
     for diresidue in diresidues:
         bestScore += np.amin(scoringMatrix[diresidue])
     
     cdef double cutoffScore = 2.5 * bestScore
     
-    
-    startNode = sTree.search(<uchar*> startLetter, 1)
-    
-    cdef talentQueueItem *testItem = <talentQueueItem*> malloc(sizeof(talentQueueItem))
-    testItem.nid = startNode
-    testItem.score = 0
-    
-    openSet.push_back(testItem)
-    
     with open(outputFilepath, "w") as outputFile:
         
-        #tableIgnores = []
-        #if not revComp:
+        if not revComp:
+            outputFile.write("table_ignores:Plus strand sequence\n")
         
-        #tableIgnores.append("Plus strand sequence")
-        #if len(tableIgnores) > 0:
-        outputFile.write("table_ignores:Plus strand sequence\n") #+ string.join(tableIgnores, ",") + "\n")
-            
         outputFile.write("Best Possible Score:" + str(round(bestScore, 2)) + "\n")
         outputFile.write('Genome Coordinates\tStrand\tScore\tTarget Sequence\tPlus strand sequence\n')
         
-        while not openSet.empty():
+        _ScoreTalentTask(diresidues, len(diresidues), outputFile, False, cutoffScore, baseMap, geneBoundaries, scoringMatrix, sTree)
+        
+        if revComp:
+            _ScoreTalentTask(diresidues, len(diresidues), outputFile, True, cutoffScore, revBaseMap, geneBoundaries, scoringMatrix, sTree)
+        
+
+cdef char* reverseComplement(char* sequence, unsigned int sequenceLength):
+    cdef char *new_sequence = strndup(sequence, sequenceLength)
+    for i in range(sequenceLength):
+        if new_sequence[i] == 'A':
+            new_sequence[i] = 'T'
+        elif new_sequence[i] == 'C':
+            new_sequence[i] = 'G'
+        elif new_sequence[i] == 'G':
+            new_sequence[i] = 'C'
+        elif new_sequence[i] == 'T':
+            new_sequence[i] = 'A'
+    
+    return new_sequence
+    
+cdef _ScoreTalentTask(diresidues, unsigned int diresiduesLength, outputFile, bool revComp, double cutoffScore, map[uchar, int] baseMap, geneBoundaries, np.ndarray[scoringMatrixRecord] scoringMatrix, SSTree *sTree):
+    
+    cdef ulong k, childNid, textPos
+    cdef unsigned int parentDepth, depth
+    cdef deque[talentQueueItem*] *openSet = new deque[talentQueueItem*]()
+    cdef char startChar
+    cdef char *sequence, *revcomp_sequence 
+    
+    
+    cdef double childScore
+    cdef talentQueueItem* node
+    cdef talentQueueItem* child
+    
+    if revComp:
+        diresidues.reverse()
+        startChar = 'A'
+    else:
+        startChar = 'T'
+    
+    cdef ulong startNode = sTree.search(<uchar*> &startChar, 1)
+    
+    cdef uchar edgeChar
+
+    
+    cdef talentQueueItem *startNodeItem = <talentQueueItem*> malloc(sizeof(talentQueueItem))
+    startNodeItem.nid = startNode
+    startNodeItem.score = 0
+    
+    openSet.push_back(startNodeItem)
+    
+    while not openSet.empty():
+        
+        node = openSet.back()
+        openSet.pop_back()
+        parentDepth = sTree.depth(node.nid) - 1
+        
+        if parentDepth < diresiduesLength:
+        
+            childNid = sTree.firstChild(node.nid)
             
-            node = openSet.back()
-            openSet.pop_back()
-            parentDepth = sTree.depth(node.nid) - 1
-            
-            if parentDepth < diresiduesLength:
-            
-                childNid = sTree.firstChild(node.nid)
+            while childNid != 0:
                 
+                childScore = node.score
+                
+                k = 1
+                depth = parentDepth
+                edgeChar = sTree.edge(childNid, k)
+                
+                badChar = False
+                
+                while depth < diresiduesLength and edgeChar != '\x00':
+                    
+                    if edgeChar != '\x41' and edgeChar != '\x43' and edgeChar != '\x47' and edgeChar != '\x54':
+                        badChar = True
+                        break
+                    
+                    diresidue = diresidues[depth]
+                    baseIndex = baseMap[edgeChar]
+                    
+                    if diresidue in scoringMatrixDtype.fields:
+                        childScore += scoringMatrix[diresidue][baseIndex]
+                    else:
+                        childScore += scoringMatrix['XX'][baseIndex]
+                    
+                    k += 1
+                    depth += 1
+                    edgeChar = sTree.edge(childNid, k)
+                
+                if not badChar and childScore < cutoffScore:
+                    child = <talentQueueItem*> malloc(sizeof(talentQueueItem))
+                    child.nid = childNid
+                    child.score = childScore
+                    openSet.push_back(child)
+                
+                childNid = sTree.sibling(childNid)
+                
+        else:
+            
+            if not sTree.isleaf(node.nid):
+                
+                childNid = sTree.firstChild(node.nid)
+            
                 while childNid != 0:
                     
-                    childScore = node.score
-                    
-                    k = 1
-                    depth = parentDepth
-                    edgeChar = "%c" % sTree.edge(childNid, k)
-                    
-                    badChar = False
-                    
-                    while depth < diresiduesLength and edgeChar != '\x00':
-                        
-                        if edgeChar != '\x41' and edgeChar != '\x43' and edgeChar != '\x47' and edgeChar != '\x54':
-                            badChar = True
-                            break
-                        
-                        diresidue = diresidues[depth]
-                        baseIndex = baseMap[edgeChar]
-                        
-                        if diresidue in scoringMatrixDtype.fields:
-                            childScore += scoringMatrix[diresidue][baseIndex]
-                        else:
-                            childScore += scoringMatrix['ZZ'][baseIndex]
-                        
-                        k += 1
-                        depth += 1
-                        edgeChar = "%c" % sTree.edge(childNid, k)
-                    
-                    if not badChar and childScore < cutoffScore:
-                        child = <talentQueueItem*> malloc(sizeof(talentQueueItem))
-                        child.nid = childNid
-                        child.score = childScore
-                        openSet.push_back(child)
+                    child = <talentQueueItem*> malloc(sizeof(talentQueueItem))
+                    child.nid = childNid
+                    child.score = node.score
+                    openSet.push_back(child)
                     
                     childNid = sTree.sibling(childNid)
-                    
+            
             else:
                 
-                if not sTree.isleaf(node.nid):
-                    
-                    childNid = sTree.firstChild(node.nid)
+                textPos = sTree.textpos(node.nid) + 1
+                listIndex = geneBoundaries.bisect_right({'pos': textPos})
                 
-                    while childNid != 0:
-                        
-                        child = <talentQueueItem*> malloc(sizeof(talentQueueItem))
-                        child.nid = childNid
-                        child.score = node.score
-                        openSet.push_back(child)
-                        
-                        childNid = sTree.sibling(childNid)
-                
-                else:
+                if listIndex != len(geneBoundaries):
                     
-                    textPos = sTree.textpos(node.nid) + 1
-                    listIndex = geneBoundaries.bisect_right({'pos': textPos})
+                    if listIndex == 0:
+                        outputTextPos = str(textPos)
+                    else:
+                        outputTextPos = str(textPos - geneBoundaries[listIndex - 1]['pos'])
                     
-                    if listIndex != len(geneBoundaries):
-                        
-                        if listIndex == 0:
-                            outputTextPos = str(textPos)
-                        else:
-                            outputTextPos = str(textPos - geneBoundaries[listIndex - 1]['pos'])
-                        
-                        sequence = <char*> sTree.substring(textPos, diresiduesLength)
+                    sequence = <char*> sTree.substring(textPos, diresiduesLength)
+                    
+                    if not revComp:
                         outputFile.write("C" + str(geneBoundaries[listIndex]['chromosome']) + ", " + outputTextPos + "\tPlus\t" + str(round(node.score, 2)) + "\t" + sequence + "\t" + sequence + "\n")
-            
-            free(node)
+                    else:
+                        revcomp_sequence = reverseComplement(sequence, diresiduesLength)
+                        outputFile.write("C" + str(geneBoundaries[listIndex]['chromosome']) + ", " + outputTextPos + "\tMinus\t"  + str(round(node.score, 2)) + "\t" + revcomp_sequence + "\t" + sequence + "\n")
+                        free(revcomp_sequence)
+                        
+                    free(sequence)
+                    
+        free(node)
+    free(openSet)
