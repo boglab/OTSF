@@ -300,7 +300,7 @@ cdef class PySSTree:
         return self.thisptr.numberofnodes(v)
         
         
-    cpdef ulong s(self, ulong v):
+    cpdef ulong numberofleaves(self, ulong v):
         """
         Returns the Number of leaf nodes in a subtree rooted at the node v.
         """  
@@ -418,6 +418,8 @@ def ScoreTalentTask(querySequence, outputFilepath, bool revComp, geneBoundaries,
 cdef char* reverseComplement(char* sequence, unsigned int sequenceLength):
     cdef char *new_sequence = <char*> calloc(sequenceLength, sizeof(char))
     cdef char base
+    cdef unsigned int i
+    
     for i in range(sequenceLength):
         base = sequence[sequenceLength - i - 1]
         if base == 'A':
@@ -453,28 +455,12 @@ cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, 
         startNodeItem = <talentQueueItem*> malloc(sizeof(talentQueueItem))
         startNodeItem.nid = 0
         startNodeItem.score = 0
-        
     
     else:
+        
         startNodeItem = <talentQueueItem*> malloc(sizeof(talentQueueItem))
         startNodeItem.nid = sTree.search(<uchar*> &startChar, 1)
         startNodeItem.score = 0
-        
-        #startChar = 'A'
-        #startNodeItem = <talentQueueItem*> malloc(sizeof(talentQueueItem))
-        #startNodeItem.nid = sTree.search(<uchar*> &startChar, 1)
-        #startNodeItem.score = 0
-        #
-        #startChar = 'C'
-        #startNodeItem = <talentQueueItem*> malloc(sizeof(talentQueueItem))
-        #startNodeItem.nid = sTree.search(<uchar*> &startChar, 1)
-        #startNodeItem.score = 0
-        #
-        #startChar = 'G'
-        #startNodeItem = <talentQueueItem*> malloc(sizeof(talentQueueItem))
-        #startNodeItem.nid = sTree.search(<uchar*> &startChar, 1)
-        #startNodeItem.score = 0
-        
     
     openSet.push(startNodeItem)
     
@@ -527,6 +513,7 @@ cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, 
                         if edgeChar == '\x00' or edgeChar == '\x41':
                             
                             if edgeChar == '\x00':
+
                                 childNid = sTree.child(childNid, 'A')
                             
                             
@@ -573,7 +560,7 @@ cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, 
                     sequence = <char*> sTree.substring(textPos, diresiduesLength)
                     
                     if listIndex == 0:
-                        outputTextPos = textPos
+                        outputTextPos = textPos + 1
                     else:
                         outputTextPos = textPos - geneBoundaries[listIndex - 1]['pos']
                     
@@ -590,6 +577,7 @@ cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, 
                         revcomp_sequence = reverseComplement(sequence, diresiduesLength)
                         tabOutFile.write("C%s, %lu\t%s\t%.2lf\t%s\t%s\n" % (cname, outputTextPos, "Minus", outputScore, revcomp_sequence, sequence))
                         gffOutFile.write("%s\t%s\t%s\t%lu\t%lu\t%.2lf\t%c\t.\trvd_sequence=%s;target_sequence=%s;\n" % (cname, "TALESF", "TAL_effector_binding_site", outputTextPos, outputTextPos + diresiduesLength - 1, node.score, "-", querySequence, revcomp_sequence))
+                        
                         free(revcomp_sequence)
                         
                     free(sequence)
