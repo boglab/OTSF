@@ -4,7 +4,7 @@ from cython.operator import dereference
 import numpy as np
 cimport numpy as np
 
-from libcpp.deque cimport deque
+from libcpp.stack cimport stack
 from libc.stdlib cimport malloc, free
 from libcpp cimport bool
 from libcpp.pair cimport pair
@@ -431,10 +431,9 @@ cdef _ScoreTalentTask(diresidues, unsigned int diresiduesLength, outputFile, boo
     
     cdef ulong k, childNid, textPos
     cdef unsigned int parentDepth, depth
-    cdef deque[talentQueueItem*] *openSet = new deque[talentQueueItem*]()
+    cdef stack[talentQueueItem*] openSet
     cdef char startChar
     cdef char *sequence, *revcomp_sequence 
-    
     
     cdef double childScore
     cdef talentQueueItem* node
@@ -449,18 +448,17 @@ cdef _ScoreTalentTask(diresidues, unsigned int diresiduesLength, outputFile, boo
     cdef ulong startNode = sTree.search(<uchar*> &startChar, 1)
     
     cdef uchar edgeChar
-
     
     cdef talentQueueItem *startNodeItem = <talentQueueItem*> malloc(sizeof(talentQueueItem))
     startNodeItem.nid = startNode
     startNodeItem.score = 0
     
-    openSet.push_back(startNodeItem)
+    openSet.push(startNodeItem)
     
     while not openSet.empty():
         
-        node = openSet.back()
-        openSet.pop_back()
+        node = openSet.top()
+        openSet.pop()
         parentDepth = sTree.depth(node.nid) - 1
         
         if parentDepth < diresiduesLength:
@@ -499,7 +497,7 @@ cdef _ScoreTalentTask(diresidues, unsigned int diresiduesLength, outputFile, boo
                     child = <talentQueueItem*> malloc(sizeof(talentQueueItem))
                     child.nid = childNid
                     child.score = childScore
-                    openSet.push_back(child)
+                    openSet.push(child)
                 
                 childNid = sTree.sibling(childNid)
                 
@@ -514,7 +512,7 @@ cdef _ScoreTalentTask(diresidues, unsigned int diresiduesLength, outputFile, boo
                     child = <talentQueueItem*> malloc(sizeof(talentQueueItem))
                     child.nid = childNid
                     child.score = node.score
-                    openSet.push_back(child)
+                    openSet.push(child)
                     
                     childNid = sTree.sibling(childNid)
             
@@ -542,4 +540,3 @@ cdef _ScoreTalentTask(diresidues, unsigned int diresiduesLength, outputFile, boo
                     free(sequence)
                     
         free(node)
-    free(openSet)
