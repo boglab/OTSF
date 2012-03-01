@@ -1,5 +1,5 @@
-from cython.operator cimport dereference
-from cython.operator import dereference
+from cython.operator cimport dereference, preincrement
+from cython.operator import dereference, preincrement
 
 import numpy as np
 cimport numpy as np
@@ -9,6 +9,7 @@ from libc.stdlib cimport malloc, free, calloc
 from libcpp cimport bool
 from libcpp.pair cimport pair
 from libcpp.map cimport map
+from libcpp.vector cimport vector
 
 #https://groups.google.com/d/topic/cython-users/4h2_AYi_ncA/discussion
 cdef extern from * namespace "SSTree":
@@ -70,6 +71,14 @@ cdef extern from "SSTree.h":
         ulong LF(uchar c, ulong& sp, ulong& ep)
         ulong inverseSuffixLink(ulong nodeId, uchar c)
 
+ctypedef bool (*talentQueueItemPFunctionPtr)(talentQueueItem*,talentQueueItem*)
+
+cdef extern from "<algorithm>" namespace "std":
+    void sort(vector[talentQueueItem*].iterator first, vector[talentQueueItem*].iterator last, talentQueueItemPFunctionPtr)
+    
+cdef bool talentQueueItemPCompare(talentQueueItem* i,talentQueueItem* j):
+    return i.score < j.score
+
 # X replaces * in RVD names
 
 #runtime scoring matrix type
@@ -129,6 +138,7 @@ cdef packed struct scoringMatrixRecord:
 ctypedef packed struct talentQueueItem:
     ulong nid
     double score
+    bool revComp
 
 cdef map[uchar, int] baseMap
 
@@ -380,15 +390,10 @@ cdef class PySSTree:
         self.thisptr.PrintTree(v, d)
 
 
-
-
 def ScoreTalentTask(querySequence, outputFilepath, bool revComp, geneBoundaries, np.ndarray[scoringMatrixRecord] scoringMatrix, PySSTree psTree):
     
     cdef SSTree *sTree = psTree.thisptr
     cdef double bestScore = 0
-    
-    #querySequence = querySequence.replace("*", "X").upper().rstrip()
-    #diresidues = querySequence.split(' ')
     
     querySequence = querySequence.upper().rstrip()
     diresidues = querySequence.replace("*", "X").split()
@@ -398,22 +403,14 @@ def ScoreTalentTask(querySequence, outputFilepath, bool revComp, geneBoundaries,
     
     cdef double cutoffScore = 2.5 * bestScore
     
-    with open(outputFilepath + ".txt", "w") as tabOutFile:
-        with open(outputFilepath + ".gff3", "w") as gffOutFile:
-            
-            if not revComp:
-                tabOutFile.write("table_ignores:Plus strand sequence\n")
-            
-            tabOutFile.write("Best Possible Score:" + str(round(bestScore, 2)) + "\n")
-            tabOutFile.write('Genome Coordinates\tStrand\tScore\tTarget Sequence\tPlus strand sequence\n')
-            
-            gffOutFile.write("##gff-version 3\n")
-            
-            _ScoreTalentTask(querySequence, diresidues, len(diresidues), tabOutFile, gffOutFile, False, cutoffScore, baseMap, geneBoundaries, scoringMatrix, sTree)
-            
-            if revComp:
-                _ScoreTalentTask(querySequence, diresidues, len(diresidues), tabOutFile, gffOutFile, True, cutoffScore, revBaseMap, geneBoundaries, scoringMatrix, sTree)
+    cdef vector[talentQueueItem*] results
+    
+    _ScoreTalentTask(querySequence, diresidues, len(diresidues), &results, False, cutoffScore, baseMap, scoringMatrix, sTree)
+    
+    if revComp:
+        _ScoreTalentTask(querySequence, diresidues, len(diresidues), &results, True, cutoffScore, revBaseMap, scoringMatrix, sTree)
         
+    _PrintTaskResults(querySequence, len(diresidues), outputFilepath, &results, revComp, bestScore, geneBoundaries, sTree)
 
 cdef char* reverseComplement(char* sequence, unsigned int sequenceLength):
     cdef char *new_sequence = <char*> calloc(sequenceLength, sizeof(char))
@@ -433,7 +430,7 @@ cdef char* reverseComplement(char* sequence, unsigned int sequenceLength):
     
     return new_sequence
     
-cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, tabOutFile, gffOutFile, bool revComp, double cutoffScore, map[uchar, int] baseMap, geneBoundaries, np.ndarray[scoringMatrixRecord] scoringMatrix, SSTree *sTree):
+cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, vector[talentQueueItem*] *results, bool revComp, double cutoffScore, map[uchar, int] baseMap, np.ndarray[scoringMatrixRecord] scoringMatrix, SSTree *sTree):
     
     cdef ulong k, childNid, textPos
     cdef unsigned int parentDepth, depth
@@ -448,6 +445,8 @@ cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, 
     cdef talentQueueItem *startNodeItem
     cdef ulong startNode
     cdef uchar edgeChar
+    
+    cdef bool nodeOutput
     
     if revComp:
         
@@ -468,6 +467,8 @@ cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, 
         
         node = openSet.top()
         openSet.pop()
+        
+        nodeOutput = False
         
         if not revComp:
             parentDepth = sTree.depth(node.nid) - 1
@@ -548,7 +549,43 @@ cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, 
             
             else:
                 
-                if revComp:
+                nodeOutput = True
+                node.revComp = revComp
+                results.push_back(node)
+                
+        if not nodeOutput:   
+            free(node)
+
+
+cdef _PrintTaskResults(querySequence, unsigned int diresiduesLength, outputFilepath, vector[talentQueueItem*] *results, bool revComp, double bestScore, geneBoundaries, SSTree *sTree):
+    
+    sort(results.begin(), results.end(), talentQueueItemPCompare)
+    
+    cdef vector[talentQueueItem*].iterator it = results.begin()
+    cdef talentQueueItem* node
+    
+    with open(outputFilepath + ".txt", "w") as tabOutFile:
+        with open(outputFilepath + ".gff3", "w") as gffOutFile:
+            
+            gffOutFile.write("##gff-version 3\n")
+            
+            if not revComp:
+                tabOutFile.write("table_ignores:Plus strand sequence\n")
+                gffOutFile.write("#table_display_tags:target_sequence\n")
+            else:
+                gffOutFile.write("#table_display_tags:target_sequence,plus_strand_sequence\n")
+            
+            
+            gffOutFile.write("#Best Possible Score:" + str(round(bestScore, 2)) + "\n")            
+            
+            tabOutFile.write("Best Possible Score:" + str(round(bestScore, 2)) + "\n")
+            tabOutFile.write('Genome Coordinates\tStrand\tScore\tTarget Sequence\tPlus strand sequence\n')
+            
+            while it != results.end():
+                
+                node = dereference(it)
+
+                if node.revComp:
                     textPos = sTree.textpos(node.nid)
                 else:
                     textPos = sTree.textpos(node.nid) + 1
@@ -569,17 +606,18 @@ cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, 
                     
                     outputScore = round(node.score, 2)
                     
-                    if not revComp:
-                        #tabOutFile.write("C" + cname + ", " + str(outputTextPos) + "\tPlus\t" + str(outputScore) + "\t" + sequence + "\t" + sequence + "\n")
+                    if not node.revComp:
                         tabOutFile.write("C%s, %lu\t%s\t%.2lf\t%s\t%s\n" % (cname, outputTextPos, "Plus", outputScore, sequence, sequence))
-                        gffOutFile.write("%s\t%s\t%s\t%lu\t%lu\t%.2lf\t%c\t.\trvd_sequence=%s;target_sequence=%s;\n" % (cname, "TALESF", "TAL_effector_binding_site", outputTextPos, outputTextPos + diresiduesLength - 1, node.score, "+", querySequence, sequence))
+                        gffOutFile.write("%s\t%s\t%s\t%lu\t%lu\t%.2lf\t%c\t.\trvd_sequence=%s;target_sequence=%s;plus_strand_sequence=%s;\n" % (cname, "TALESF", "TAL_effector_binding_site", outputTextPos, outputTextPos + diresiduesLength - 1, node.score, "+", querySequence, sequence, sequence))
                     else:
                         revcomp_sequence = reverseComplement(sequence, diresiduesLength)
+                        
                         tabOutFile.write("C%s, %lu\t%s\t%.2lf\t%s\t%s\n" % (cname, outputTextPos, "Minus", outputScore, revcomp_sequence, sequence))
-                        gffOutFile.write("%s\t%s\t%s\t%lu\t%lu\t%.2lf\t%c\t.\trvd_sequence=%s;target_sequence=%s;\n" % (cname, "TALESF", "TAL_effector_binding_site", outputTextPos, outputTextPos + diresiduesLength - 1, node.score, "-", querySequence, revcomp_sequence))
+                        gffOutFile.write("%s\t%s\t%s\t%lu\t%lu\t%.2lf\t%c\t.\trvd_sequence=%s;target_sequence=%s;plus_strand_sequence=%s;\n" % (cname, "TALESF", "TAL_effector_binding_site", outputTextPos, outputTextPos + diresiduesLength - 1, node.score, "-", querySequence, revcomp_sequence, sequence))
                         
                         free(revcomp_sequence)
                         
                     free(sequence)
-                    
-        free(node)
+                
+                free(node)
+                preincrement(it)
