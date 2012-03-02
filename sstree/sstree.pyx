@@ -11,6 +11,8 @@ from libcpp.pair cimport pair
 from libcpp.map cimport map
 from libcpp.vector cimport vector
 
+from libc.math cimport round as cround
+
 #https://groups.google.com/d/topic/cython-users/4h2_AYi_ncA/discussion
 cdef extern from * namespace "SSTree":
     enum io_action:
@@ -556,6 +558,10 @@ cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, 
         if not nodeOutput:   
             free(node)
 
+#track name=pairedReads description="Clone Paired Reads" useScore=1
+#chr22 1000 5000 cloneA 960 + 1000 5000 0 2 567,488, 0,3512
+#chr22 2000 6000 cloneB 900 - 2000 6000 0 2 433,399, 0,3601
+#chrom start end name score strand 
 
 cdef _PrintTaskResults(querySequence, unsigned int diresiduesLength, outputFilepath, vector[talentQueueItem*] *results, bool revComp, double bestScore, geneBoundaries, SSTree *sTree):
     
@@ -563,61 +569,71 @@ cdef _PrintTaskResults(querySequence, unsigned int diresiduesLength, outputFilep
     
     cdef vector[talentQueueItem*].iterator it = results.begin()
     cdef talentQueueItem* node
+    cdef int counter = 1
     
     with open(outputFilepath + ".txt", "w") as tabOutFile:
         with open(outputFilepath + ".gff3", "w") as gffOutFile:
+            with open(outputFilepath + ".bed", "w") as bedOutFile:
             
-            gffOutFile.write("##gff-version 3\n")
-            
-            if not revComp:
-                tabOutFile.write("table_ignores:Plus strand sequence\n")
-                gffOutFile.write("#table_display_tags:target_sequence\n")
-            else:
-                gffOutFile.write("#table_display_tags:target_sequence,plus_strand_sequence\n")
-            
-            
-            gffOutFile.write("#Best Possible Score:" + str(round(bestScore, 2)) + "\n")            
-            
-            tabOutFile.write("Best Possible Score:" + str(round(bestScore, 2)) + "\n")
-            tabOutFile.write('Genome Coordinates\tStrand\tScore\tTarget Sequence\tPlus strand sequence\n')
-            
-            while it != results.end():
+                gffOutFile.write("##gff-version 3\n")
                 
-                node = dereference(it)
-
-                if node.revComp:
-                    textPos = sTree.textpos(node.nid)
+                if not revComp:
+                    tabOutFile.write("table_ignores:Plus strand sequence\n")
+                    gffOutFile.write("#table_display_tags:target_sequence\n")
                 else:
-                    textPos = sTree.textpos(node.nid) + 1
+                    gffOutFile.write("#table_display_tags:target_sequence,plus_strand_sequence\n")
                     
-                listIndex = geneBoundaries.bisect_right({'pos': textPos})
+                bedOutFile.write('track name="TAL Targets" description="Targets for RVD sequence ' + querySequence + '" visibility=2 useScore=1\n')
                 
-                if listIndex != len(geneBoundaries):
-                    
-                    sequence = <char*> sTree.substring(textPos, diresiduesLength)
-                    
-                    if listIndex == 0:
-                        outputTextPos = textPos + 1
-                    else:
-                        outputTextPos = textPos - geneBoundaries[listIndex - 1]['pos']
-                    
-                    
-                    cname = str(geneBoundaries[listIndex]['chromosome'])
-                    
-                    outputScore = round(node.score, 2)
-                    
-                    if not node.revComp:
-                        tabOutFile.write("C%s, %lu\t%s\t%.2lf\t%s\t%s\n" % (cname, outputTextPos, "Plus", outputScore, sequence, sequence))
-                        gffOutFile.write("%s\t%s\t%s\t%lu\t%lu\t%.2lf\t%c\t.\trvd_sequence=%s;target_sequence=%s;plus_strand_sequence=%s;\n" % (cname, "TALESF", "TAL_effector_binding_site", outputTextPos, outputTextPos + diresiduesLength - 1, node.score, "+", querySequence, sequence, sequence))
-                    else:
-                        revcomp_sequence = reverseComplement(sequence, diresiduesLength)
-                        
-                        tabOutFile.write("C%s, %lu\t%s\t%.2lf\t%s\t%s\n" % (cname, outputTextPos, "Minus", outputScore, revcomp_sequence, sequence))
-                        gffOutFile.write("%s\t%s\t%s\t%lu\t%lu\t%.2lf\t%c\t.\trvd_sequence=%s;target_sequence=%s;plus_strand_sequence=%s;\n" % (cname, "TALESF", "TAL_effector_binding_site", outputTextPos, outputTextPos + diresiduesLength - 1, node.score, "-", querySequence, revcomp_sequence, sequence))
-                        
-                        free(revcomp_sequence)
-                        
-                    free(sequence)
+                roundedBestScore = str(round(bestScore, 2))
+                gffOutFile.write("#Best Possible Score:" + roundedBestScore + "\n")            
                 
-                free(node)
-                preincrement(it)
+                tabOutFile.write("Best Possible Score:" + roundedBestScore + "\n")
+                tabOutFile.write('Genome Coordinates\tStrand\tScore\tTarget Sequence\tPlus strand sequence\n')
+                
+                while it != results.end():
+                    
+                    node = dereference(it)
+    
+                    if node.revComp:
+                        textPos = sTree.textpos(node.nid)
+                    else:
+                        textPos = sTree.textpos(node.nid) + 1
+                        
+                    listIndex = geneBoundaries.bisect_right({'pos': textPos})
+                    
+                    if listIndex != len(geneBoundaries):
+                        
+                        sequence = <char*> sTree.substring(textPos, diresiduesLength)
+                        
+                        if listIndex == 0:
+                            outputTextPos = textPos + 1
+                        else:
+                            outputTextPos = textPos - geneBoundaries[listIndex - 1]['pos']
+                        
+                        
+                        cname = str(geneBoundaries[listIndex]['chromosome'])
+                        
+                        outputScore = round(node.score, 2)
+                        
+                        if not node.revComp:
+                            tabOutFile.write("C%s, %lu\t%s\t%.2lf\t%s\t%s\n" % (cname, outputTextPos, "Plus", outputScore, sequence, sequence))
+                            gffOutFile.write("%s\t%s\t%s\t%lu\t%lu\t%.2lf\t%c\t.\trvd_sequence=%s;target_sequence=%s;plus_strand_sequence=%s;\n" % (cname, "TALESF", "TAL_effector_binding_site", outputTextPos, outputTextPos + diresiduesLength - 1, node.score, "+", querySequence, sequence, sequence))
+                            # 0 based                            
+                            bedOutFile.write("%s\t%d\t%d\tsite%d\t%.2lf\t%s\n" %  (cname, outputTextPos - 1, outputTextPos + diresiduesLength - 2, counter, cround(bestScore / node.score * 1000), '+'))
+                        else:
+                            revcomp_sequence = reverseComplement(sequence, diresiduesLength)
+                            
+                            tabOutFile.write("C%s, %lu\t%s\t%.2lf\t%s\t%s\n" % (cname, outputTextPos, "Minus", outputScore, revcomp_sequence, sequence))
+                            gffOutFile.write("%s\t%s\t%s\t%lu\t%lu\t%.2lf\t%c\t.\trvd_sequence=%s;target_sequence=%s;plus_strand_sequence=%s;\n" % (cname, "TALESF", "TAL_effector_binding_site", outputTextPos, outputTextPos + diresiduesLength - 1, node.score, "-", querySequence, revcomp_sequence, sequence))
+                            # 0 based                            
+                            bedOutFile.write("%s\t%d\t%d\tsite%d\t%.2lf\t%s\n" %  (cname, outputTextPos - 1, outputTextPos + diresiduesLength - 2, counter, cround(bestScore / node.score * 1000), '-'))
+                            
+                            free(revcomp_sequence)
+                            
+                        free(sequence)
+                        
+                        counter += 1
+                    
+                    free(node)
+                    preincrement(it)

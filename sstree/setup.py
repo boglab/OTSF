@@ -15,7 +15,7 @@ setup(
             language="c++",
             include_dirs = ['src', libSSTreeIncludeDir, np.get_include()],
             library_dirs = ["/usr/lib"],
-            libraries = ["SSTree"],
+            libraries = ["SSTree", "m"],
         )
     ],
     cmdclass={'build_ext': build_ext}
