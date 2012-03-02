@@ -6,7 +6,7 @@ import pickle
 import re
 
 from sstree import ScoreTalentTask
-from genome_scoring import SCORING_MATRIX, GENOME_FILE, TREE_FILE, BOUNDARY_FILE
+from genome_scoring import SCORING_MATRIX, GENOME_FILE, TREE_FILE, BOUNDARY_FILE, DRUPAL_CALLBACK_URL
 
 import urllib
 
@@ -38,8 +38,8 @@ _workerState["scoringMatrix"] = pickle.load(open(SCORING_MATRIX, "r"))
 
 
 @task
-def TalentTask(querySequence, outputFilepath, nodeID):#, subMatrix, baseMap, scoringMatrix, sTree):
-    ScoreTalentTask(querySequence, outputFilepath, _workerState["subMatrix"], _workerState["baseMap"], _workerState["geneBoundaries"], _workerState["scoringMatrix"], _workerState["sTree"])
+def TalentTask(querySequence, outputFilepath, nodeID, revComp):#, subMatrix, baseMap, scoringMatrix, sTree):
+    ScoreTalentTask(querySequence, outputFilepath, revComp, _workerState["geneBoundaries"], _workerState["scoringMatrix"], _workerState["sTree"])
     if nodeID != -1:
-        urllib.urlopen("https://boglab.plp.iastate.edu/talent/jobcomplete/" + str(nodeID) + "/0")
+        urllib.urlopen(DRUPAL_CALLBACK_URL + str(nodeID) + "/0")
 

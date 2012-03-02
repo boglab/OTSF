@@ -1,4 +1,6 @@
-BASE_DIR = "/opt/boglab"
+#BASE_DIR = "/home/nick/workspace/boglab_OTSF"
+#BASE_DIR = "/opt/boglab"
+BASE_DIR = "/opt/boglab_OTSF"
 GENOME_DIR = BASE_DIR + "/genome_data"
 GENOME_FILE = GENOME_DIR + "/%s_tree.fasta"
 TREE_DIR = BASE_DIR + "/trees"
@@ -7,3 +9,5 @@ SCORING_MATRIX = BASE_DIR + "/genome_scoring/numpy_scoring_dump"
 BOUNDARY_FILE = TREE_DIR + "/%s_terminators"
 TASK_MODULE = "genome_scoring.%s_task"
 RVD_SEQ_REGEX = r'^(?:(?:HD|NI|NG|NN|NS|N\*|HG|HA|ND|NK|HI|HN|NA|IG|H\*|S\*|NH|YG|SN|SS|NC|HH)\s+){11,30}(?:HD|NI|NG|NN|NS|N\*|HG|HA|ND|NK|HI|HN|NA|IG|H\*|S\*|NH|YG|SN|SS|NC|HH)$'
+#DRUPAL_CALLBACK_URL = "https://boglab.plp.iastate.edu/talent/jobcomplete/"
+DRUPAL_CALLBACK_URL = "http://talent.local/talent/jobcomplete/"
