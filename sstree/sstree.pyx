@@ -12,7 +12,7 @@ from libcpp.map cimport map
 from libcpp.vector cimport vector
 
 from libc.math cimport round as cround
-
+import time
 #https://groups.google.com/d/topic/cython-users/4h2_AYi_ncA/discussion
 cdef extern from * namespace "SSTree":
     enum io_action:
@@ -434,15 +434,14 @@ cdef char* reverseComplement(char* sequence, unsigned int sequenceLength):
     
 cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, vector[talentQueueItem*] *results, bool revComp, double cutoffScore, map[uchar, int] baseMap, np.ndarray[scoringMatrixRecord] scoringMatrix, SSTree *sTree):
     
-    cdef ulong k, childNid, textPos
+    cdef ulong k, childNid, revCompChild
     cdef unsigned int parentDepth, depth
     cdef stack[talentQueueItem*] openSet
     cdef char startChar = 'T'
-    cdef char *sequence, *revcomp_sequence 
     
     cdef double childScore
-    cdef talentQueueItem* node
-    cdef talentQueueItem* child
+    cdef talentQueueItem *node
+    cdef talentQueueItem *child
     
     cdef talentQueueItem *startNodeItem
     cdef ulong startNode
@@ -450,18 +449,15 @@ cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, 
     
     cdef bool nodeOutput
     
+    startNodeItem = <talentQueueItem*> malloc(sizeof(talentQueueItem))
+    startNodeItem.score = 0
+    
     if revComp:
-        
         diresidues.reverse()
-        startNodeItem = <talentQueueItem*> malloc(sizeof(talentQueueItem))
         startNodeItem.nid = 0
-        startNodeItem.score = 0
     
     else:
-        
-        startNodeItem = <talentQueueItem*> malloc(sizeof(talentQueueItem))
         startNodeItem.nid = sTree.search(<uchar*> &startChar, 1)
-        startNodeItem.score = 0
     
     openSet.push(startNodeItem)
     
@@ -489,12 +485,10 @@ cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, 
                 depth = parentDepth
                 edgeChar = sTree.edge(childNid, k)
                 
-                badChar = False
-                
-                while depth < diresiduesLength and edgeChar != '\x00':
+                while depth < diresiduesLength and childScore <= cutoffScore and edgeChar != '\x00':
                     
                     if edgeChar != '\x41' and edgeChar != '\x43' and edgeChar != '\x47' and edgeChar != '\x54':
-                        badChar = True
+                        childScore = cutoffScore + 1
                         break
                     
                     diresidue = diresidues[depth]
@@ -504,35 +498,42 @@ cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, 
                         childScore += scoringMatrix[diresidue][baseIndex]
                     else:
                         childScore += scoringMatrix['XX'][baseIndex]
-                    
-                    k += 1
+                        
+                    k += 1                    
                     depth += 1
+
                     edgeChar = sTree.edge(childNid, k)
                 
-                if not badChar and childScore < cutoffScore:
+                if childScore <= cutoffScore:
                     
-                    if revComp and depth == diresiduesLength:
+                    if revComp and depth == diresiduesLength and edgeChar != '\x00':
                         
-                        if edgeChar == '\x00' or edgeChar == '\x41':
-                            
-                            if edgeChar == '\x00':
-
-                                childNid = sTree.child(childNid, 'A')
-                            
-                            
+                        if edgeChar == '\x41':
+                                
                             child = <talentQueueItem*> malloc(sizeof(talentQueueItem))
                             child.nid = childNid
                             child.score = childScore
                             openSet.push(child)
-                            
+                        
                     else:
                         child = <talentQueueItem*> malloc(sizeof(talentQueueItem))
                         child.nid = childNid
                         child.score = childScore
+                        child.revComp = revComp
                         openSet.push(child)
-                        
                 
                 childNid = sTree.sibling(childNid)
+                
+        elif revComp and parentDepth == diresiduesLength:
+            
+            revCompChild = sTree.child(node.nid, 'A')
+            
+            if revCompChild != 0:
+                child = <talentQueueItem*> malloc(sizeof(talentQueueItem))
+                child.nid = revCompChild
+                child.score = node.score
+                child.revComp = revComp
+                openSet.push(child)
                 
         else:
             
@@ -543,25 +544,20 @@ cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, 
                 while childNid != 0:
                     
                     child = <talentQueueItem*> malloc(sizeof(talentQueueItem))
+                        
                     child.nid = childNid
                     child.score = node.score
+                    child.revComp = revComp
                     openSet.push(child)
-                    
                     childNid = sTree.sibling(childNid)
             
             else:
                 
                 nodeOutput = True
-                node.revComp = revComp
                 results.push_back(node)
-                
+        
         if not nodeOutput:   
             free(node)
-
-#track name=pairedReads description="Clone Paired Reads" useScore=1
-#chr22 1000 5000 cloneA 960 + 1000 5000 0 2 567,488, 0,3512
-#chr22 2000 6000 cloneB 900 - 2000 6000 0 2 433,399, 0,3601
-#chrom start end name score strand 
 
 cdef _PrintTaskResults(querySequence, unsigned int diresiduesLength, outputFilepath, vector[talentQueueItem*] *results, bool revComp, double bestScore, geneBoundaries, SSTree *sTree):
     
@@ -570,6 +566,8 @@ cdef _PrintTaskResults(querySequence, unsigned int diresiduesLength, outputFilep
     cdef vector[talentQueueItem*].iterator it = results.begin()
     cdef talentQueueItem* node
     cdef int counter = 1
+    cdef char *sequence, *revcomp_sequence
+    cdef ulong textPos
     
     with open(outputFilepath + ".txt", "w") as tabOutFile:
         with open(outputFilepath + ".gff3", "w") as gffOutFile:
@@ -594,7 +592,7 @@ cdef _PrintTaskResults(querySequence, unsigned int diresiduesLength, outputFilep
                 while it != results.end():
                     
                     node = dereference(it)
-    
+                    
                     if node.revComp:
                         textPos = sTree.textpos(node.nid)
                     else:
@@ -610,8 +608,7 @@ cdef _PrintTaskResults(querySequence, unsigned int diresiduesLength, outputFilep
                             outputTextPos = textPos + 1
                         else:
                             outputTextPos = textPos - geneBoundaries[listIndex - 1]['pos']
-                        
-                        
+                            
                         cname = str(geneBoundaries[listIndex]['chromosome'])
                         
                         outputScore = round(node.score, 2)
@@ -619,17 +616,18 @@ cdef _PrintTaskResults(querySequence, unsigned int diresiduesLength, outputFilep
                         if not node.revComp:
                             tabOutFile.write("C%s, %lu\t%s\t%.2lf\t%s\t%s\n" % (cname, outputTextPos, "Plus", outputScore, sequence, sequence))
                             gffOutFile.write("%s\t%s\t%s\t%lu\t%lu\t%.2lf\t%c\t.\trvd_sequence=%s;target_sequence=%s;plus_strand_sequence=%s;\n" % (cname, "TALESF", "TAL_effector_binding_site", outputTextPos, outputTextPos + diresiduesLength - 1, node.score, "+", querySequence, sequence, sequence))
-                            # 0 based                            
+                            # 0 based
                             bedOutFile.write("%s\t%d\t%d\tsite%d\t%.2lf\t%s\n" %  (cname, outputTextPos - 1, outputTextPos + diresiduesLength - 2, counter, cround(bestScore / node.score * 1000), '+'))
                         else:
                             revcomp_sequence = reverseComplement(sequence, diresiduesLength)
-                            
                             tabOutFile.write("C%s, %lu\t%s\t%.2lf\t%s\t%s\n" % (cname, outputTextPos, "Minus", outputScore, revcomp_sequence, sequence))
                             gffOutFile.write("%s\t%s\t%s\t%lu\t%lu\t%.2lf\t%c\t.\trvd_sequence=%s;target_sequence=%s;plus_strand_sequence=%s;\n" % (cname, "TALESF", "TAL_effector_binding_site", outputTextPos, outputTextPos + diresiduesLength - 1, node.score, "-", querySequence, revcomp_sequence, sequence))
-                            # 0 based                            
+                            # 0 based
                             bedOutFile.write("%s\t%d\t%d\tsite%d\t%.2lf\t%s\n" %  (cname, outputTextPos - 1, outputTextPos + diresiduesLength - 2, counter, cround(bestScore / node.score * 1000), '-'))
-                            
+                        
+                        if revcomp_sequence != NULL:
                             free(revcomp_sequence)
+                            revcomp_sequence = NULL
                             
                         free(sequence)
                         
