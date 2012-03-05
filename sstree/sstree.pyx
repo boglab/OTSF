@@ -403,7 +403,7 @@ def ScoreTalentTask(querySequence, outputFilepath, bool revComp, geneBoundaries,
     for diresidue in diresidues:
         bestScore += np.amin(scoringMatrix[diresidue])
     
-    cdef double cutoffScore = 2.5 * bestScore
+    cdef double cutoffScore = 3.0 * bestScore
     
     cdef vector[talentQueueItem*] results
     
