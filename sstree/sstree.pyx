@@ -617,13 +617,13 @@ cdef _PrintTaskResults(querySequence, unsigned int diresiduesLength, outputFilep
                         
                         if not node.revComp:
                             tabOutFile.write("C%s, %lu\t%s\t%.2lf\t%s\t%s\n" % (cname, outputTextPos, "Plus", outputScore, sequence, sequence))
-                            gffOutFile.write("%s\t%s\t%s\t%lu\t%lu\t%.2lf\t%c\t.\trvd_sequence=%s;target_sequence=%s;plus_strand_sequence=%s;\n" % (cname, "TALESF", "TAL_effector_binding_site", outputTextPos, outputTextPos + diresiduesLength - 1, node.score, "+", outputQuerySequence, sequence, sequence))
+                            gffOutFile.write("Chr%s\t%s\t%s\t%lu\t%lu\t%.2lf\t%c\t.\trvd_sequence=%s;target_sequence=%s;plus_strand_sequence=%s;\n" % (cname, "TALESF", "TAL_effector_binding_site", outputTextPos, outputTextPos + diresiduesLength - 1, node.score, "+", outputQuerySequence, sequence, sequence))
                             # 0 based
                             bedOutFile.write("%s\t%d\t%d\tsite%d\t%.2lf\t%s\n" %  (cname, outputTextPos - 1, outputTextPos + diresiduesLength - 2, counter, cround(bestScore / node.score * 1000), '+'))
                         else:
                             revcomp_sequence = reverseComplement(sequence, diresiduesLength)
                             tabOutFile.write("C%s, %lu\t%s\t%.2lf\t%s\t%s\n" % (cname, outputTextPos, "Minus", outputScore, revcomp_sequence, sequence))
-                            gffOutFile.write("%s\t%s\t%s\t%lu\t%lu\t%.2lf\t%c\t.\trvd_sequence=%s;target_sequence=%s;plus_strand_sequence=%s;\n" % (cname, "TALESF", "TAL_effector_binding_site", outputTextPos, outputTextPos + diresiduesLength - 1, node.score, "-", outputQuerySequence, revcomp_sequence, sequence))
+                            gffOutFile.write("Chr%s\t%s\t%s\t%lu\t%lu\t%.2lf\t%c\t.\trvd_sequence=%s;target_sequence=%s;plus_strand_sequence=%s;\n" % (cname, "TALESF", "TAL_effector_binding_site", outputTextPos, outputTextPos + diresiduesLength - 1, node.score, "-", outputQuerySequence, revcomp_sequence, sequence))
                             # 0 based
                             bedOutFile.write("%s\t%d\t%d\tsite%d\t%.2lf\t%s\n" %  (cname, outputTextPos - 1, outputTextPos + diresiduesLength - 2, counter, cround(bestScore / node.score * 1000), '-'))
                         
