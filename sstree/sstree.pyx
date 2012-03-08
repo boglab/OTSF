@@ -10,6 +10,7 @@ from libcpp cimport bool
 from libcpp.pair cimport pair
 from libcpp.map cimport map
 from libcpp.vector cimport vector
+from libcpp.string cimport string
 
 from libc.math cimport round as cround
 import time
@@ -77,71 +78,61 @@ ctypedef bool (*talentQueueItemPFunctionPtr)(talentQueueItem*,talentQueueItem*)
 
 cdef extern from "<algorithm>" namespace "std":
     void sort(vector[talentQueueItem*].iterator first, vector[talentQueueItem*].iterator last, talentQueueItemPFunctionPtr)
+    void reverse(vector[int].iterator first, vector[int].iterator last)
     
 cdef bool talentQueueItemPCompare(talentQueueItem* i,talentQueueItem* j):
     return i.score < j.score
 
 # X replaces * in RVD names
 
-#runtime scoring matrix type
-scoringMatrixDtype = np.dtype([
-    ('HD', 'float32'),
-    ('NI', 'float32'),
-    ('NG', 'float32'),
-    ('NN', 'float32'),
-    ('NS', 'float32'),
-    ('NX', 'float32'),
-    ('HG', 'float32'),
-    ('HA', 'float32'),
-    ('ND', 'float32'),
-    ('NK', 'float32'),
-    ('HI', 'float32'),
-    ('HN', 'float32'),
-    ('NA', 'float32'),
-    ('IG', 'float32'),
-    ('HX', 'float32'),
-    ('SX', 'float32'),
-    ('NH', 'float32'),
-    ('YG', 'float32'),
-    ('SN', 'float32'),
-    ('SS', 'float32'),
-    ('NC', 'float32'),
-    ('HH', 'float32'),
-    ('XX', 'float32'),
-])
-
-#compile time scoring matrix type
-cdef packed struct scoringMatrixRecord:
-    np.float32_t HD
-    np.float32_t NI
-    np.float32_t NG
-    np.float32_t NN
-    np.float32_t NS
-    np.float32_t NX
-    np.float32_t HG
-    np.float32_t HA
-    np.float32_t ND
-    np.float32_t NK
-    np.float32_t HI
-    np.float32_t HN
-    np.float32_t NA
-    np.float32_t IG
-    np.float32_t HX
-    np.float32_t SX
-    np.float32_t NH
-    np.float32_t YG
-    np.float32_t SN
-    np.float32_t SS
-    np.float32_t NC
-    np.float32_t HH
-    #other
-    np.float32_t XX
+cdef map[string, int] numpyMap
+cdef char* tStr = 'HD'
+numpyMap[string(tStr)] = 0
+tStr = 'NI'
+numpyMap[string(tStr)] = 1
+tStr = 'NG'
+numpyMap[string(tStr)] = 2
+tStr = 'NN'
+numpyMap[string(tStr)] = 3
+tStr = 'NS'
+numpyMap[string(tStr)] = 4
+tStr = 'NX'
+numpyMap[string(tStr)] = 5
+tStr = 'HG'
+numpyMap[string(tStr)] = 6
+tStr = 'HA'
+numpyMap[string(tStr)] = 7
+tStr = 'ND'
+numpyMap[string(tStr)] = 8
+tStr = 'NK'
+numpyMap[string(tStr)] = 9
+tStr = 'HI'
+numpyMap[string(tStr)] = 10
+tStr = 'HN'
+numpyMap[string(tStr)] = 11
+tStr = 'NA'
+numpyMap[string(tStr)] = 12
+tStr = 'IG'
+numpyMap[string(tStr)] = 13
+tStr = 'HX'
+numpyMap[string(tStr)] = 14
+tStr = 'SX'
+numpyMap[string(tStr)] = 15
+tStr = 'NH'
+numpyMap[string(tStr)] = 16
+tStr = 'YG'
+numpyMap[string(tStr)] = 17
+tStr = 'SN'
+numpyMap[string(tStr)] = 18
+tStr = 'SS'
+numpyMap[string(tStr)] = 19
+tStr = 'NC'
+numpyMap[string(tStr)] = 20
+tStr = 'HH'
+numpyMap[string(tStr)] = 21
+tStr = 'XX'
+numpyMap[string(tStr)] = 22
         
-ctypedef packed struct talentQueueItem:
-    ulong nid
-    double score
-    bool revComp
-
 cdef map[uchar, int] baseMap
 
 baseMap['A'] = 0
@@ -149,13 +140,17 @@ baseMap['C'] = 1
 baseMap['G'] = 2
 baseMap['T'] = 3
 
-
 cdef map[uchar, int] revBaseMap
 
 revBaseMap['A'] = 3
 revBaseMap['C'] = 2
 revBaseMap['G'] = 1
 revBaseMap['T'] = 0
+
+ctypedef packed struct talentQueueItem:
+    ulong nid
+    double score
+    bool revComp
 
 
 cdef class PySSTree:
@@ -392,27 +387,45 @@ cdef class PySSTree:
         self.thisptr.PrintTree(v, d)
 
 
-def ScoreTalentTask(querySequence, outputFilepath, bool revComp, geneBoundaries, np.ndarray[scoringMatrixRecord] scoringMatrix, PySSTree psTree):
+def ScoreTalentTask(querySequence, outputFilepath, bool revComp, geneBoundaries, np.ndarray[np.float32_t, ndim=2] scoringMatrix, PySSTree psTree):
     
     cdef SSTree *sTree = psTree.thisptr
     cdef double bestScore = 0
     
     querySequence = querySequence.upper().rstrip()
-    diresidues = querySequence.replace("*", "X").split()
+    py_diresidues = querySequence.replace("*", "X").split()
     
-    for diresidue in diresidues:
-        bestScore += np.amin(scoringMatrix[diresidue])
+    cdef vector[int] diresidues
+    cdef char* diresidue_c_str
+    cdef string diresidue_string
+    cdef int numpyIndex
+
+    cdef char* unknown_diresidue_c_str = "XX"
+    cdef int unknown_numpy_index = numpyMap[string(unknown_diresidue_c_str)]
+    
+    for diresidue in py_diresidues:
+
+        diresidue_c_str = diresidue
+        diresidue_string = string(diresidue_c_str)
+        
+        if numpyMap.count(diresidue_string):
+            numpyIndex = numpyMap[diresidue_string]
+        else:
+            numpyIndex = unknown_numpy_index
+        
+        diresidues.push_back(numpyIndex)
+        bestScore += np.amin(scoringMatrix[numpyIndex])
     
     cdef double cutoffScore = 3.0 * bestScore
     
     cdef vector[talentQueueItem*] results
     
-    _ScoreTalentTask(querySequence, diresidues, len(diresidues), &results, False, cutoffScore, baseMap, scoringMatrix, sTree)
+    _ScoreTalentTask(querySequence, &diresidues, &results, False, cutoffScore, baseMap, scoringMatrix, sTree)
     
     if revComp:
-        _ScoreTalentTask(querySequence, diresidues, len(diresidues), &results, True, cutoffScore, revBaseMap, scoringMatrix, sTree)
+        _ScoreTalentTask(querySequence, &diresidues, &results, True, cutoffScore, revBaseMap, scoringMatrix, sTree)
         
-    _PrintTaskResults(querySequence, len(diresidues), outputFilepath, &results, revComp, bestScore, geneBoundaries, sTree)
+    _PrintTaskResults(querySequence, diresidues.size(), outputFilepath, &results, revComp, bestScore, geneBoundaries, sTree)
 
 cdef char* reverseComplement(char* sequence, unsigned int sequenceLength):
     cdef char *new_sequence = <char*> calloc(sequenceLength, sizeof(char))
@@ -432,7 +445,7 @@ cdef char* reverseComplement(char* sequence, unsigned int sequenceLength):
     
     return new_sequence
     
-cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, vector[talentQueueItem*] *results, bool revComp, double cutoffScore, map[uchar, int] baseMap, np.ndarray[scoringMatrixRecord] scoringMatrix, SSTree *sTree):
+cdef _ScoreTalentTask(querySequence, vector[int] *diresidues, vector[talentQueueItem*] *results, bool revComp, double cutoffScore, map[uchar, int] baseMap, np.ndarray[np.float32_t, ndim=2] scoringMatrix, SSTree *sTree):
     
     cdef ulong k, childNid, revCompChild
     cdef unsigned int parentDepth, depth
@@ -449,14 +462,19 @@ cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, 
     
     cdef bool nodeOutput
     
+    cdef int baseIndex, numpyIndex, listIndex, diresidue
+    
     startNodeItem = <talentQueueItem*> malloc(sizeof(talentQueueItem))
     startNodeItem.score = 0
     
     if revComp:
-        diresidues.reverse()
+        
+        diresidues = new vector[int](dereference(diresidues))
+        reverse(diresidues.begin(), diresidues.end())
         startNodeItem.nid = 0
     
     else:
+        
         startNodeItem.nid = sTree.search(<uchar*> &startChar, 1)
     
     openSet.push(startNodeItem)
@@ -473,7 +491,7 @@ cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, 
         else:
             parentDepth = sTree.depth(node.nid)
         
-        if parentDepth < diresiduesLength:
+        if parentDepth < diresidues.size():
         
             childNid = sTree.firstChild(node.nid)
             
@@ -485,19 +503,16 @@ cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, 
                 depth = parentDepth
                 edgeChar = sTree.edge(childNid, k)
                 
-                while depth < diresiduesLength and childScore <= cutoffScore and edgeChar != '\x00':
+                while depth < diresidues.size() and childScore <= cutoffScore and edgeChar != '\x00':
                     
                     if edgeChar != '\x41' and edgeChar != '\x43' and edgeChar != '\x47' and edgeChar != '\x54':
                         childScore = cutoffScore + 1
                         break
                     
-                    diresidue = diresidues[depth]
+                    diresidue = diresidues.at(depth)
                     baseIndex = baseMap[edgeChar]
                     
-                    if diresidue in scoringMatrixDtype.fields:
-                        childScore += scoringMatrix[diresidue][baseIndex]
-                    else:
-                        childScore += scoringMatrix['XX'][baseIndex]
+                    childScore += scoringMatrix[diresidue, baseIndex]
                         
                     k += 1                    
                     depth += 1
@@ -506,7 +521,7 @@ cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, 
                 
                 if childScore <= cutoffScore:
                     
-                    if revComp and depth == diresiduesLength and edgeChar != '\x00':
+                    if revComp and depth == diresidues.size() and edgeChar != '\x00':
                         
                         if edgeChar == '\x41':
                                 
@@ -525,7 +540,7 @@ cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, 
                 
                 childNid = sTree.sibling(childNid)
                 
-        elif revComp and parentDepth == diresiduesLength:
+        elif revComp and parentDepth == diresidues.size():
             
             revCompChild = sTree.child(node.nid, 'A')
             
@@ -559,6 +574,9 @@ cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, 
         
         if not nodeOutput:   
             free(node)
+            
+    if revComp:
+        free(diresidues)
 
 cdef _PrintTaskResults(querySequence, unsigned int diresiduesLength, outputFilepath, vector[talentQueueItem*] *results, bool revComp, double bestScore, geneBoundaries, SSTree *sTree):
     
