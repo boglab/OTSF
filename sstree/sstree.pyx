@@ -513,6 +513,7 @@ cdef _ScoreTalentTask(querySequence, diresidues, unsigned int diresiduesLength, 
                             child = <talentQueueItem*> malloc(sizeof(talentQueueItem))
                             child.nid = childNid
                             child.score = childScore
+                            child.revComp = revComp
                             openSet.push(child)
                         
                     else:
