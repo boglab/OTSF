@@ -13,7 +13,7 @@ from libcpp.vector cimport vector
 from libcpp.string cimport string
 
 from libc.math cimport round as cround
-import time
+
 #https://groups.google.com/d/topic/cython-users/4h2_AYi_ncA/discussion
 cdef extern from * namespace "SSTree":
     enum io_action:
@@ -132,7 +132,7 @@ tStr = 'HH'
 numpyMap[string(tStr)] = 21
 tStr = 'XX'
 numpyMap[string(tStr)] = 22
-        
+
 cdef map[uchar, int] baseMap
 
 baseMap['A'] = 0
@@ -420,10 +420,10 @@ def ScoreTalentTask(querySequence, outputFilepath, bool revComp, geneBoundaries,
     
     cdef vector[talentQueueItem*] results
     
-    _ScoreTalentTask(querySequence, &diresidues, &results, False, cutoffScore, baseMap, scoringMatrix, sTree)
+    _ScoreTalentTask(&diresidues, &results, False, cutoffScore, baseMap, scoringMatrix, sTree)
     
     if revComp:
-        _ScoreTalentTask(querySequence, &diresidues, &results, True, cutoffScore, revBaseMap, scoringMatrix, sTree)
+        _ScoreTalentTask(&diresidues, &results, True, cutoffScore, revBaseMap, scoringMatrix, sTree)
         
     _PrintTaskResults(querySequence, diresidues.size(), outputFilepath, &results, revComp, bestScore, geneBoundaries, sTree)
 
@@ -445,7 +445,7 @@ cdef char* reverseComplement(char* sequence, unsigned int sequenceLength):
     
     return new_sequence
     
-cdef _ScoreTalentTask(querySequence, vector[int] *diresidues, vector[talentQueueItem*] *results, bool revComp, double cutoffScore, map[uchar, int] baseMap, np.ndarray[np.float32_t, ndim=2] scoringMatrix, SSTree *sTree):
+cdef _ScoreTalentTask(vector[int] *diresidues, vector[talentQueueItem*] *results, bool revComp, double cutoffScore, map[uchar, int] baseMap, np.ndarray[np.float32_t, ndim=2] scoringMatrix, SSTree *sTree):
     
     cdef ulong k, childNid, revCompChild
     cdef unsigned int parentDepth, depth
