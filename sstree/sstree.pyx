@@ -37,7 +37,7 @@ cdef extern from "SSTree.h":
         uchar edge(ulong v, ulong d)
         char* edge(ulong v)
         
-        char* edgePrefix(ulong, ulong)
+        uchar* edgePrefix(ulong, ulong)
         
         char* pathlabel(ulong v)
         
@@ -472,6 +472,8 @@ cdef _ScoreTalentTask(vector[int] *diresidues, vector[talentQueueItem*] *results
         bool nodeOutput
         
         int baseIndex, numpyIndex, listIndex, diresidue
+        
+        char *edge
     
     startNodeItem = <talentQueueItem*> malloc(sizeof(talentQueueItem))
     startNodeItem.score = 0
@@ -508,9 +510,12 @@ cdef _ScoreTalentTask(vector[int] *diresidues, vector[talentQueueItem*] *results
                 
                 childScore = node.score
                 
-                k = 1
+                edge = <char*> sTree.edgePrefix(childNid, diresidues.size() - parentDepth + 1)
+                
+                k = 0
                 depth = parentDepth
-                edgeChar = sTree.edge(childNid, k)
+                #edgeChar = sTree.edge(childNid, k)
+                edgeChar = edge[k]
                 
                 while depth < diresidues.size() and childScore <= cutoffScore and edgeChar != '\x00':
                     
@@ -526,7 +531,7 @@ cdef _ScoreTalentTask(vector[int] *diresidues, vector[talentQueueItem*] *results
                     k += 1                    
                     depth += 1
                     
-                    edgeChar = sTree.edge(childNid, k)
+                    edgeChar = edge[k]
                 
                 if childScore <= cutoffScore:
                     
@@ -546,6 +551,8 @@ cdef _ScoreTalentTask(vector[int] *diresidues, vector[talentQueueItem*] *results
                         child.score = childScore
                         child.revComp = revComp
                         openSet.push(child)
+                
+                free(edge)
                 
                 childNid = sTree.sibling(childNid)
             
