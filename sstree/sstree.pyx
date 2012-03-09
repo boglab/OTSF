@@ -158,9 +158,9 @@ cdef class PySSTree:
     cdef SSTree *thisptr
     
     def __cinit__(self, char* text = NULL, char* action = NULL, char* fileName = NULL):
-    
+        
         cdef io_action realAction = nop
-    
+        
         if action is not NULL:
             if str(action) == "save":
                 realAction = save_to
@@ -389,19 +389,25 @@ cdef class PySSTree:
 
 def ScoreTalentTask(querySequence, outputFilepath, bool revComp, geneBoundaries, np.ndarray[np.float32_t, ndim=2] scoringMatrix, PySSTree psTree):
     
-    cdef SSTree *sTree = psTree.thisptr
-    cdef double bestScore = 0
+    cdef:
+        
+        SSTree *sTree = psTree.thisptr
+        double bestScore = 0
+        double cutoffScore
+        
+        vector[int] diresidues
+        char* diresidue_c_str
+        string diresidue_string
+        int numpyIndex
+        
+        char* unknown_diresidue_c_str = "XX"
+        int unknown_numpy_index = numpyMap[string(unknown_diresidue_c_str)]
+        
+        vector[talentQueueItem*] results
+    
     
     querySequence = querySequence.upper().rstrip()
     py_diresidues = querySequence.replace("*", "X").split()
-    
-    cdef vector[int] diresidues
-    cdef char* diresidue_c_str
-    cdef string diresidue_string
-    cdef int numpyIndex
-
-    cdef char* unknown_diresidue_c_str = "XX"
-    cdef int unknown_numpy_index = numpyMap[string(unknown_diresidue_c_str)]
     
     for diresidue in py_diresidues:
 
@@ -416,9 +422,7 @@ def ScoreTalentTask(querySequence, outputFilepath, bool revComp, geneBoundaries,
         diresidues.push_back(numpyIndex)
         bestScore += np.amin(scoringMatrix[numpyIndex])
     
-    cdef double cutoffScore = 3.0 * bestScore
-    
-    cdef vector[talentQueueItem*] results
+    cutoffScore = 3.0 * bestScore
     
     _ScoreTalentTask(&diresidues, &results, False, cutoffScore, baseMap, scoringMatrix, sTree)
     
@@ -428,9 +432,11 @@ def ScoreTalentTask(querySequence, outputFilepath, bool revComp, geneBoundaries,
     _PrintTaskResults(querySequence, diresidues.size(), outputFilepath, &results, revComp, bestScore, geneBoundaries, sTree)
 
 cdef char* reverseComplement(char* sequence, unsigned int sequenceLength):
-    cdef char *new_sequence = <char*> calloc(sequenceLength, sizeof(char))
-    cdef char base
-    cdef unsigned int i
+    
+    cdef:
+        char *new_sequence = <char*> calloc(sequenceLength, sizeof(char))
+        char base
+        unsigned int i
     
     for i in range(sequenceLength):
         base = sequence[sequenceLength - i - 1]
@@ -447,22 +453,25 @@ cdef char* reverseComplement(char* sequence, unsigned int sequenceLength):
     
 cdef _ScoreTalentTask(vector[int] *diresidues, vector[talentQueueItem*] *results, bool revComp, double cutoffScore, map[uchar, int] baseMap, np.ndarray[np.float32_t, ndim=2] scoringMatrix, SSTree *sTree):
     
-    cdef ulong k, childNid, revCompChild
-    cdef unsigned int parentDepth, depth
-    cdef stack[talentQueueItem*] openSet
-    cdef char startChar = 'T'
     
-    cdef double childScore
-    cdef talentQueueItem *node
-    cdef talentQueueItem *child
-    
-    cdef talentQueueItem *startNodeItem
-    cdef ulong startNode
-    cdef uchar edgeChar
-    
-    cdef bool nodeOutput
-    
-    cdef int baseIndex, numpyIndex, listIndex, diresidue
+    cdef:
+        
+        ulong k, childNid, revCompChild
+        unsigned int parentDepth, depth
+        stack[talentQueueItem*] openSet
+        char startChar = 'T'
+        
+        double childScore
+        talentQueueItem *node
+        talentQueueItem *child
+        
+        talentQueueItem *startNodeItem
+        ulong startNode
+        uchar edgeChar
+        
+        bool nodeOutput
+        
+        int baseIndex, numpyIndex, listIndex, diresidue
     
     startNodeItem = <talentQueueItem*> malloc(sizeof(talentQueueItem))
     startNodeItem.score = 0
@@ -516,7 +525,7 @@ cdef _ScoreTalentTask(vector[int] *diresidues, vector[talentQueueItem*] *results
                         
                     k += 1                    
                     depth += 1
-
+                    
                     edgeChar = sTree.edge(childNid, k)
                 
                 if childScore <= cutoffScore:
@@ -539,7 +548,7 @@ cdef _ScoreTalentTask(vector[int] *diresidues, vector[talentQueueItem*] *results
                         openSet.push(child)
                 
                 childNid = sTree.sibling(childNid)
-                
+            
         elif revComp and parentDepth == diresidues.size():
             
             revCompChild = sTree.child(node.nid, 'A')
@@ -556,7 +565,7 @@ cdef _ScoreTalentTask(vector[int] *diresidues, vector[talentQueueItem*] *results
             if not sTree.isleaf(node.nid):
                 
                 childNid = sTree.firstChild(node.nid)
-            
+                
                 while childNid != 0:
                     
                     child = <talentQueueItem*> malloc(sizeof(talentQueueItem))
@@ -582,11 +591,13 @@ cdef _PrintTaskResults(querySequence, unsigned int diresiduesLength, outputFilep
     
     sort(results.begin(), results.end(), talentQueueItemPCompare)
     
-    cdef vector[talentQueueItem*].iterator it = results.begin()
-    cdef talentQueueItem* node
-    cdef int counter = 1
-    cdef char *sequence, *revcomp_sequence
-    cdef ulong textPos
+    cdef:
+        
+        vector[talentQueueItem*].iterator it = results.begin()
+        talentQueueItem* node
+        int counter = 1
+        char *sequence, *revcomp_sequence
+        ulong textPos
     
     with open(outputFilepath + ".txt", "w") as tabOutFile:
         with open(outputFilepath + ".gff3", "w") as gffOutFile:
