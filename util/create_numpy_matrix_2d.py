@@ -6,34 +6,7 @@ import numpy as np
 # The scorer replaces any * in the RVD sequence with X
 # Z would have been used instead of X, but someone defined HZ as a macro somewhere in the cython compiler software stack
 
-scoring_matrix_dtype = np.dtype([
-    ('HD', 'float32'),
-    ('NI', 'float32'),
-    ('NG', 'float32'),
-    ('NN', 'float32'),
-    ('NS', 'float32'),
-    ('NX', 'float32'),
-    ('HG', 'float32'),
-    ('HA', 'float32'),
-    ('ND', 'float32'),
-    ('NK', 'float32'),
-    ('HI', 'float32'),
-    ('HN', 'float32'),
-    ('NA', 'float32'),
-    ('IG', 'float32'),
-    ('HX', 'float32'),
-    ('SX', 'float32'),
-    ('NH', 'float32'),
-    ('YG', 'float32'),
-    ('SN', 'float32'),
-    ('SS', 'float32'),
-    ('NC', 'float32'),
-    ('HH', 'float32'),
-    #other
-    ('XX', 'float32'),
-])
-
-scoring_matrix = np.zeros((23, 4), dtype=np.float32)
+scoring_matrix = np.zeros((23, 4), dtype=np.float32, order='F')
 
 DNA_dict = {'A':0, 'C':1, 'G':2, 'T':3}
 

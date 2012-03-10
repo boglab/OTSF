@@ -387,7 +387,7 @@ cdef class PySSTree:
         self.thisptr.PrintTree(v, d)
 
 
-def ScoreTalentTask(querySequence, outputFilepath, bool revComp, geneBoundaries, np.ndarray[np.float32_t, ndim=2] scoringMatrix, PySSTree psTree):
+def ScoreTalentTask(querySequence, outputFilepath, bool revComp, geneBoundaries, np.ndarray[np.float32_t, ndim=2, mode='fortran'] scoringMatrix, PySSTree psTree):
     
     cdef:
         
@@ -451,7 +451,7 @@ cdef char* reverseComplement(char* sequence, unsigned int sequenceLength):
     
     return new_sequence
     
-cdef _ScoreTalentTask(vector[int] *diresidues, vector[talentQueueItem*] *results, bool revComp, double cutoffScore, map[uchar, int] baseMap, np.ndarray[np.float32_t, ndim=2] scoringMatrix, SSTree *sTree):
+cdef _ScoreTalentTask(vector[int] *diresidues, vector[talentQueueItem*] *results, bool revComp, double cutoffScore, map[uchar, int] baseMap, np.ndarray[np.float32_t, ndim=2, mode='fortran'] scoringMatrix, SSTree *sTree):
     
     
     cdef:
